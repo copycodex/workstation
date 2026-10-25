@@ -22,7 +22,7 @@ printf '%s\n' \
   '@repo EX2 ~/ExampleOrg2 pto-agents' \
   > "$WS_SESSIONS_CONF"
 
-# shellcheck source=../bin/ws
+# shellcheck source=bin/ws
 source "$repo_root/bin/ws"
 
 expected_rendered="$(printf '%s\n' \

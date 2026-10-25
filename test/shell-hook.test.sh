@@ -112,9 +112,7 @@ HOME="$MISSING_HOME" DEV_AGENTS_BIN="$MISSING_LAUNCHERS" \
 
 META_HOME="$TEST_ROOT/meta-home"
 META_MARKER="$TEST_ROOT/path-injection-ran"
-META_BIN="$TEST_ROOT/"\
-'dev-agents-$literal-$(mark-path-injection)-'\
-'`mark-path-injection`-"quoted path"/bin'
+META_BIN="$TEST_ROOT/dev-agents-\$literal-\$(mark-path-injection)-\`mark-path-injection\`-\"quoted path\"/bin"
 mkdir -p "$META_HOME" "$META_BIN"
 : >"$META_HOME/.bashrc"
 cat >"$TEST_BIN/mark-path-injection" <<'EOF'
@@ -272,10 +270,10 @@ assert_shell_failure() {
 }
 
 [[ $(grep -cxF '# >>> dev-agents launchers >>>' "$TEST_HOME/.bashrc") == 1 ]]
-! grep -qE '^[[:space:]]*alias[[:space:]]+codex-dev=' "$TEST_HOME/.bashrc"
-! grep -qE '^[[:space:]]*alias[[:space:]]+claude-own=' "$TEST_HOME/.bashrc"
-! grep -qE '^[[:space:]]*(codex|claude)[[:space:]]*\(\)[[:space:]]*\{' \
-  "$TEST_HOME/.bashrc"
+if grep -qE '^[[:space:]]*alias[[:space:]]+codex-dev=' "$TEST_HOME/.bashrc"; then exit 1; fi
+if grep -qE '^[[:space:]]*alias[[:space:]]+claude-own=' "$TEST_HOME/.bashrc"; then exit 1; fi
+if grep -qE '^[[:space:]]*(codex|claude)[[:space:]]*\(\)[[:space:]]*\{' \
+  "$TEST_HOME/.bashrc"; then exit 1; fi
 grep -qxF '# # >>> dev-agents launchers >>>' "$TEST_HOME/.bashrc"
 grep -qxF '# codex() {' "$TEST_HOME/.bashrc"
 grep -qxF '# claude() {' "$TEST_HOME/.bashrc"
