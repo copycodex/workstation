@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nvim — навигация и поиск</title>
+<style>
+  :root {
+    --ground: #eaeeee; --surface: #fff; --surface-2: #f4f7f7;
+    --ink: #161d1f; --muted: #5b696c; --faint: #8a9799; --rule: #d2dadb;
+    --accent: #a8422c; --accent-soft: #f5e2dd;
+    --calm: #1d6b6b; --calm-soft: #d9eaea;
+    --kbd-bg: #fff; --kbd-edge: #c3cdcf; --kbd-ink: #1d2628;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101618; --surface: #182022; --surface-2: #1e2729;
+      --ink: #dde5e5; --muted: #8fa0a2; --faint: #6c7b7d; --rule: #2a3639;
+      --accent: #f0836a; --accent-soft: #33201b;
+      --calm: #74c2bc; --calm-soft: #17302f;
+      --kbd-bg: #222c2f; --kbd-edge: #394749; --kbd-ink: #e4ecec;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font-family: var(--sans); font-size: 16px; line-height: 1.55; }
+  .wrap { max-width: 1060px; margin: 0 auto;
+          padding: clamp(22px,5vw,52px) clamp(14px,4vw,36px) 88px;
+          display: flex; flex-direction: column; gap: 34px; }
+  h1 { font-family: var(--mono); font-size: clamp(26px,4.4vw,40px); font-weight: 700;
+       letter-spacing: -0.02em; margin: 0 0 8px; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0; }
+  nav { font-family: var(--mono); font-size: 13px; margin-top: 10px; }
+  nav a { color: var(--calm); }
+  section { background: var(--surface); border: 1px solid var(--rule);
+            border-left: 3px solid var(--accent); border-radius: 4px;
+            padding: 20px clamp(14px,3vw,26px) 22px;
+            display: flex; flex-direction: column; gap: 14px; }
+  section.calm { border-left-color: var(--calm); }
+  h2 { font-family: var(--mono); font-size: 18px; font-weight: 700; margin: 0; }
+  .note { color: var(--muted); margin: 0; max-width: 68ch; font-size: 14.5px; }
+  .note strong { color: var(--ink); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(330px,1fr)); gap: 0 28px; }
+  .row { display: grid; grid-template-columns: minmax(130px,auto) 1fr; gap: 5px 14px;
+         align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .what { font-size: 14.5px; }
+  .what em { color: var(--muted); font-style: normal; }
+  kbd { font-family: var(--mono); font-size: 12.5px; background: var(--kbd-bg);
+        color: var(--kbd-ink); border: 1px solid var(--kbd-edge); border-bottom-width: 2px;
+        border-radius: 3px; padding: 2px 6px; white-space: nowrap; display: inline-block; }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .sep { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--surface-2);
+         border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px; }
+  .callout { background: var(--accent-soft); border-left: 3px solid var(--accent);
+             border-radius: 3px; padding: 11px 14px; font-size: 14.5px; }
+  .callout b { color: var(--accent); }
+  .ok { background: var(--calm-soft); border-left-color: var(--calm); }
+  .ok b { color: var(--calm); }
+  footer { color: var(--faint); font-size: 13px; font-family: var(--mono);
+           border-top: 1px solid var(--rule); padding-top: 16px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>nvim — навигация и поиск</h1>
+  <p class="lede">Лидер — <kbd>Пробел</kbd>. Нажми его и подожди: всплывёт подсказка со всеми продолжениями. Забыл клавишу — <kbd>Пробел</kbd> <kbd>s</kbd> <kbd>k</kbd> ищет по всем биндам.</p>
+  <nav>рядом: <a href="tmux.html">← шпаргалка по tmux</a></nav>
+</header>
+
+<section>
+  <h2>Русская раскладка — работает</h2>
+  <p class="note">Команды понимают ЙЦУКЕН: нажатое <kbd>о</kbd> уводит вниз, <kbd>л</kbd> вверх, <kbd>Ж</kbd> открывает командную строку, <kbd>ю</kbd> повторяет последнюю правку, <kbd>Э</kbd> выбирает регистр. Переключаться на английский ради команд больше не нужно.</p>
+  <p class="note">Сверх этого раскладка возвращается сама: <kbd>Esc</kbd> из режима вставки ставит английскую, повторный вход в режим вставки возвращает ту, в которой писали, а <kbd>:</kbd> всегда открывает командную строку по-английски. Поиск <kbd>/</kbd> не трогается — по русскому тексту ищут по-русски.</p>
+  <div class="callout"><b>Кроме сочетаний с Ctrl.</b> <kbd>Ctrl-o</kbd>, <kbd>Ctrl-w</kbd>, <kbd>Ctrl-d</kbd> и прочие Neovim разбирает раньше подстановки, поэтому на русской раскладке они не сработают — под них раскладку придётся переключать. Так же недоступны <kbd>$</kbd> и <kbd>^</kbd>: этих символов в ЙЦУКЕН нет вообще.</div>
+</section>
+
+<section>
+  <h2>Буфер обмена — работает</h2>
+  <p class="note">Скопированное в nvim сразу попадает в системный буфер: обычный <kbd>y</kbd> <kbd>y</kbd> уже кладёт строку туда, откуда её вставит любое приложение. Отдельный регистр <code>"+</code> для этого не нужен, но работает тоже.</p>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>y</kbd><kbd>y</kbd></div><div class="what">Скопировать строку <em>— и в nvim, и в систему</em></div></div>
+    <div class="row"><div class="keys"><kbd>v</kbd><span class="sep">…</span><kbd>y</kbd></div><div class="what">Выделить и скопировать</div></div>
+    <div class="row"><div class="keys"><kbd>p</kbd><span class="sep">/</span><kbd>P</kbd></div><div class="what">Вставить после / перед курсором</div></div>
+    <div class="row"><div class="keys"><kbd>"</kbd><kbd>+</kbd><kbd>y</kbd></div><div class="what">Явно в системный буфер <em>— если сомневаешься</em></div></div>
+  </div>
+  <div class="callout ok"><b>Из панели tmux, а не из nvim</b> копируется иначе: <kbd>Ctrl-a</kbd> <kbd>Enter</kbd>, затем <kbd>v</kbd> выделить и <kbd>y</kbd> скопировать.</div>
+</section>
+
+<section>
+  <h2>Навигация внутри файла</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>g</kbd><span class="sep">/</span><kbd>G</kbd></div><div class="what">В начало / в конец файла</div></div>
+    <div class="row"><div class="keys"><kbd>{</kbd><span class="sep">/</span><kbd>}</kbd></div><div class="what">На абзац назад / вперёд</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-d</kbd><span class="sep">/</span><kbd>Ctrl-u</kbd></div><div class="what">Полэкрана вниз / вверх</div></div>
+    <div class="row"><div class="keys"><kbd>w</kbd><span class="sep">/</span><kbd>b</kbd></div><div class="what">На слово вперёд / назад</div></div>
+    <div class="row"><div class="keys"><kbd>0</kbd><span class="sep">/</span><kbd>^</kbd><span class="sep">/</span><kbd>$</kbd></div><div class="what">Начало строки / первый символ / конец</div></div>
+    <div class="row"><div class="keys"><kbd>%</kbd></div><div class="what">К парной скобке</div></div>
+    <div class="row"><div class="keys"><kbd>f</kbd><span class="sep">+ символ</span></div><div class="what">К символу в строке <em>— повтор <kbd>;</kbd>, назад <kbd>,</kbd></em></div></div>
+    <div class="row"><div class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>G</kbd></div><div class="what">К строке номер 12</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>O</kbd></div><div class="what"><strong>Структура файла</strong> — список функций и классов</div></div>
+    <div class="row"><div class="keys"><kbd>z</kbd><kbd>z</kbd></div><div class="what">Отцентрировать экран по курсору</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Поиск слов на странице</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>/</kbd><span class="sep">+ текст</span></div><div class="what">Искать вперёд <em>— <kbd>?</kbd> назад</em></div></div>
+    <div class="row"><div class="keys"><kbd>n</kbd><span class="sep">/</span><kbd>N</kbd></div><div class="what">Следующее / предыдущее совпадение</div></div>
+    <div class="row"><div class="keys"><kbd>*</kbd><span class="sep">/</span><kbd>#</kbd></div><div class="what">Искать слово под курсором вперёд / назад</div></div>
+    <div class="row"><div class="keys"><kbd>Esc</kbd></div><div class="what">Снять подсветку найденного</div></div>
+    <div class="row"><div class="keys"><code>:%s/было/стало/g</code></div><div class="what">Заменить во всём файле <em>— добавь <code>c</code> для подтверждений</em></div></div>
+  </div>
+</section>
+
+<section class="calm">
+  <h2>Навигация по проекту</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>\</kbd></div><div class="what">Дерево файлов слева — открыть и закрыть</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>f</kbd></div><div class="what">Найти файл по имени</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>g</kbd></div><div class="what"><strong>Grep по всему проекту</strong> с живым превью</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>w</kbd></div><div class="what">Grep слова под курсором</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>.</kbd></div><div class="what">Недавние файлы</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>r</kbd></div><div class="what">Повторить прошлый поиск</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>d</kbd></div><div class="what">Все ошибки и предупреждения проекта</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>W</kbd></div><div class="what">Найти символ по всему проекту <em>— как «искать везде»</em></div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>Space</kbd></div><div class="what">Список открытых буферов</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-h</kbd><kbd>Ctrl-j</kbd><kbd>Ctrl-k</kbd><kbd>Ctrl-l</kbd></div><div class="what">Между сплитами <strong>внутри</strong> nvim</div></div>
+  </div>
+  <p class="note">В окне поиска работают <kbd>Ctrl-n</kbd> и <kbd>Ctrl-p</kbd> для перебора результатов, Enter открывает, <kbd>Esc</kbd> закрывает.</p>
+</section>
+
+<section class="calm">
+  <h2>Ходить по коду</h2>
+  <p class="note">Работает через языковые серверы — те же, что под капотом у JetBrains, поэтому связи настоящие, а не текстовый поиск. Прицепился ли сервер, показывает <code>:LspInfo</code>.</p>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>d</kbd></div><div class="what">Провалиться в определение</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-o</kbd><span class="sep">/</span><kbd>Ctrl-i</kbd></div><div class="what">Назад / вперёд по истории переходов</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>r</kbd></div><div class="what">Все ссылки на сущность</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>i</kbd></div><div class="what">Реализации интерфейса</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>t</kbd></div><div class="what">Перейти к типу</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>c</kbd></div><div class="what">Иерархия вызовов: кто вызывает</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>C</kbd></div><div class="what">Иерархия вызовов: кого вызывает</div></div>
+    <div class="row"><div class="keys"><kbd>]</kbd><kbd>q</kbd><span class="sep">/</span><kbd>[</kbd><kbd>q</kbd></div><div class="what">Следующий / предыдущий результат в списке</div></div>
+    <div class="row"><div class="keys"><kbd>K</kbd></div><div class="what">Документация под курсором</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>n</kbd></div><div class="what">Переименовать во всех файлах</div></div>
+    <div class="row"><div class="keys"><kbd>g</kbd><kbd>r</kbd><kbd>a</kbd></div><div class="what">Действия: исправить, импортировать, вынести</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>q</kbd></div><div class="what">Список диагностик файла</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Что дают плагины</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>s</kbd><kbd>a</kbd><span class="sep">+ объект</span></div><div class="what">Обернуть в скобки или кавычки <em>— <code>saiw)</code> слово в скобки</em></div></div>
+    <div class="row"><div class="keys"><kbd>s</kbd><kbd>d</kbd><span class="sep">+ символ</span></div><div class="what">Снять обёртку <em>— <code>sd'</code> убрать кавычки</em></div></div>
+    <div class="row"><div class="keys"><kbd>s</kbd><kbd>r</kbd><span class="sep">+ 2 символа</span></div><div class="what">Заменить обёртку <em>— <code>sr)'</code> скобки на кавычки</em></div></div>
+    <div class="row"><div class="keys"><kbd>c</kbd><kbd>i</kbd><kbd>q</kbd></div><div class="what">Изменить внутри любых кавычек</div></div>
+    <div class="row"><div class="keys"><kbd>v</kbd><kbd>a</kbd><kbd>f</kbd></div><div class="what">Выделить вызов функции вместе с аргументами</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>f</kbd></div><div class="what">Отформатировать буфер</div></div>
+    <div class="row"><div class="keys"><kbd>Space</kbd><span class="sep">→</span><kbd>s</kbd><kbd>k</kbd></div><div class="what">Поиск по всем клавишам</div></div>
+    <div class="row"><div class="keys"><code>:Mason</code></div><div class="what">Языковые серверы и форматтеры</div></div>
+    <div class="row"><div class="keys"><code>:Lazy</code></div><div class="what">Плагины: состояние, обновление, профиль запуска</div></div>
+  </div>
+  <p class="note">Автоформат при сохранении включён только для lua, go и terraform — намеренно, чтобы не разносить дифы в yaml и ts. Для остального <kbd>Пробел</kbd> <kbd>f</kbd> руками.</p>
+</section>
+
+<footer>Configuration reference</footer>
+
+</div>
+</body>
+</html>

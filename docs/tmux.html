@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tmux — сессии и окна</title>
+<style>
+  :root {
+    --ground: #eaeeee; --surface: #fff; --surface-2: #f4f7f7;
+    --ink: #161d1f; --muted: #5b696c; --faint: #8a9799; --rule: #d2dadb;
+    --accent: #1d6b6b; --accent-soft: #d9eaea;
+    --warn: #a8422c; --warn-soft: #f5e2dd;
+    --kbd-bg: #fff; --kbd-edge: #c3cdcf; --kbd-ink: #1d2628;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101618; --surface: #182022; --surface-2: #1e2729;
+      --ink: #dde5e5; --muted: #8fa0a2; --faint: #6c7b7d; --rule: #2a3639;
+      --accent: #74c2bc; --accent-soft: #17302f;
+      --warn: #f0836a; --warn-soft: #33201b;
+      --kbd-bg: #222c2f; --kbd-edge: #394749; --kbd-ink: #e4ecec;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font-family: var(--sans); font-size: 16px; line-height: 1.55; }
+  .wrap { max-width: 1060px; margin: 0 auto;
+          padding: clamp(22px,5vw,52px) clamp(14px,4vw,36px) 88px;
+          display: flex; flex-direction: column; gap: 34px; }
+  h1 { font-family: var(--mono); font-size: clamp(26px,4.4vw,40px); font-weight: 700;
+       letter-spacing: -0.02em; margin: 0 0 8px; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0; }
+  nav { font-family: var(--mono); font-size: 13px; margin-top: 10px; }
+  nav a { color: var(--accent); }
+  section { background: var(--surface); border: 1px solid var(--rule);
+            border-left: 3px solid var(--accent); border-radius: 4px;
+            padding: 20px clamp(14px,3vw,26px) 22px;
+            display: flex; flex-direction: column; gap: 14px; }
+  h2 { font-family: var(--mono); font-size: 18px; font-weight: 700; margin: 0; }
+  .note { color: var(--muted); margin: 0; max-width: 68ch; font-size: 14.5px; }
+  .note strong { color: var(--ink); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(330px,1fr)); gap: 0 28px; }
+  .row { display: grid; grid-template-columns: minmax(140px,auto) 1fr; gap: 5px 14px;
+         align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .what { font-size: 14.5px; }
+  .what em { color: var(--muted); font-style: normal; }
+  kbd { font-family: var(--mono); font-size: 12.5px; background: var(--kbd-bg);
+        color: var(--kbd-ink); border: 1px solid var(--kbd-edge); border-bottom-width: 2px;
+        border-radius: 3px; padding: 2px 6px; white-space: nowrap; display: inline-block; }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .sep { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--surface-2);
+         border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px; }
+  .diagram { overflow-x: auto; background: var(--surface-2); border: 1px solid var(--rule);
+             border-radius: 4px; padding: 13px 15px; }
+  .diagram pre { margin: 0; font-family: var(--mono); font-size: 12.5px;
+                 line-height: 1.5; color: var(--muted); }
+  .callout { background: var(--warn-soft); border-left: 3px solid var(--warn);
+             border-radius: 3px; padding: 11px 14px; font-size: 14.5px; }
+  .callout b { color: var(--warn); }
+  footer { color: var(--faint); font-size: 13px; font-family: var(--mono);
+           border-top: 1px solid var(--rule); padding-top: 16px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>tmux — сессии и окна</h1>
+  <p class="lede">Всё начинается с префикса <kbd>Ctrl-a</kbd>: нажать, <strong>отпустить</strong>, затем клавишу команды. Пока tmux ждёт вторую клавишу, в статус-баре горит красный <strong>PREFIX</strong> — не горит, значит префикс не поймался.</p>
+  <nav>рядом: <a href="nvim.html">шпаргалка по nvim →</a></nav>
+</header>
+
+<section>
+  <h2>Модель: три уровня, не больше</h2>
+  <p class="note">Вложенных окон в tmux не бывает. Иерархия ровно такая, и «проект с подпроектами» ложится на неё как сессия с окнами.</p>
+  <div class="diagram"><pre>сервер ──┬── сессия demo-code ──┬── окно 4 «app» ──┬── панель 1
+         │                    │                  └── панель 2
+         │                    └── окно 5 «docs»
+         └── сессия demo-git ─── окно 4 «app» ─── панель 1 (lazygit)</pre></div>
+  <p class="note"><strong>Сервер живёт в фоне отдельно от терминала.</strong> Закрытие окна терминала, падение X и logout убивают только клиента — сессии остаются. Не переживает лишь перезагрузку машины.</p>
+</section>
+
+<section>
+  <h2>Вход в работу</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><code>ws</code></div><div class="what">Поднять все проекты и открыть дерево выбора</div></div>
+    <div class="row"><div class="keys"><code>ws demo-code</code></div><div class="what">Сразу в конкретную сессию</div></div>
+    <div class="row"><div class="keys"><code>ws -l</code></div><div class="what">Что описано и что уже запущено</div></div>
+    <div class="row"><div class="keys"><code>tmux ls</code></div><div class="what">Список живых сессий</div></div>
+    <div class="row"><div class="keys"><code>tmux attach -t demo-code</code></div><div class="what">Вернуться в сессию</div></div>
+    <div class="row"><div class="keys"><code>tmux attach -d -t demo-code</code></div><div class="what">Вернуться, отцепив зависший терминал</div></div>
+  </div>
+  <p class="note">Терминал при открытии сам спрашивает <strong>Открыть tmux?</strong> — Enter соглашается, <code>n</code> оставляет обычный шелл.</p>
+</section>
+
+<section>
+  <h2>Сессии</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>s</kbd></div><div class="what">Дерево сессий и их окон — главный способ переключаться</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>(</kbd><span class="sep">/</span><kbd>)</kbd></div><div class="what">Предыдущая / следующая сессия</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>$</kbd></div><div class="what">Переименовать текущую сессию</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>d</kbd></div><div class="what"><strong>Detach</strong> — уйти, всё продолжает работать</div></div>
+    <div class="row"><div class="keys"><code>tmux new -s ИМЯ</code></div><div class="what">Новая сессия вручную</div></div>
+    <div class="row"><div class="keys"><code>tmux kill-session -t ИМЯ</code></div><div class="what">Убить одну сессию со всеми окнами</div></div>
+    <div class="row"><div class="keys"><code>tmux kill-server</code></div><div class="what">Убить вообще всё и начать с чистого листа</div></div>
+  </div>
+  <div class="callout"><b>Detach — не выход.</b> <kbd>Ctrl-a</kbd> <kbd>d</kbd> оставляет процессы работать, а <code>exit</code> закрывает панель; закрытие последнего окна убивает сессию. Убить сессию можно и из дерева — клавишей <kbd>x</kbd> на её строке.</div>
+</section>
+
+<section>
+  <h2>Окна = проекты</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>1</kbd><span class="sep">…</span><kbd>9</kbd></div><div class="what">Окно по номеру</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>'</kbd><span class="sep">→</span><kbd>10</kbd></div><div class="what">Двузначный номер <em>— цифровых биндов только девять</em></div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>n</kbd><span class="sep">/</span><kbd>p</kbd></div><div class="what">Следующее / предыдущее окно</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>w</kbd></div><div class="what">Список окон выбором</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>f</kbd></div><div class="what">Найти окно по имени</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>c</kbd></div><div class="what">Новое окно</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>,</kbd></div><div class="what">Переименовать окно</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>&amp;</kbd></div><div class="what">Закрыть окно <em>— спросит y/n</em></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Панели = процессы</h2>
+  <p class="note">Панель — ещё один терминал внутри окна, открывается в том же каталоге. Мышь включена: можно кликать по панели и тянуть границу.</p>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>-</kbd></div><div class="what">Разделить горизонтально <em>— одна под другой</em></div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>|</kbd></div><div class="what">Разделить вертикально <em>— рядом</em></div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></div><div class="what">Переход между панелями</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>z</kbd></div><div class="what"><strong>Зум</strong> — панель на весь экран и обратно</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></div><div class="what">Менять размер <em>— можно жать подряд</em></div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>;</kbd></div><div class="what">Туда-обратно между двумя последними</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>q</kbd></div><div class="what">Показать номера панелей</div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>x</kbd></div><div class="what">Закрыть панель <em>— спросит y/n</em></div></div>
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>!</kbd></div><div class="what">Вынести панель в отдельное окно</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Прокрутка и копирование</h2>
+  <div class="grid">
+    <div class="row"><div class="keys"><kbd>Ctrl-a</kbd><span class="sep">→</span><kbd>Enter</kbd></div><div class="what">Войти в режим копирования <em>— в нём работает прокрутка и вимовые движения</em></div></div>
+    <div class="row"><div class="keys"><kbd>v</kbd></div><div class="what">Начать выделение</div></div>
+    <div class="row"><div class="keys"><kbd>y</kbd></div><div class="what">Скопировать в системный буфер и выйти</div></div>
+    <div class="row"><div class="keys"><kbd>Esc</kbd></div><div class="what">Выйти без копирования</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Твоя раскладка</h2>
+  <p class="note">Edit <code>tmux/sessions.conf</code> for your own project directories.</p>
+</section>
+
+<footer>Configuration reference</footer>
+
+</div>
+</body>
+</html>

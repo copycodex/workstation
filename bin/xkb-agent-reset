@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Возвращает английскую раскладку, только если окно tmux с агентом активно.
+# Любая неопределённость означает тихий успешный выход: хук не должен менять
+# чужое окно или мешать отправке промпта.
+set -u
+
+pane_window_title() {
+  [[ -n ${DISPLAY:-} && -n ${TMUX_PANE:-} ]] || return 1
+  tmux display-message -p -t "$TMUX_PANE" '#S · #W' 2>/dev/null
+}
+
+active_window_id() {
+  xprop -root _NET_ACTIVE_WINDOW 2>/dev/null |
+    awk '$NF ~ /^0x[[:xdigit:]]+$/ && $NF != "0x0" { print $NF; exit }'
+}
+
+window_title() {
+  local window_id="$1"
+
+  xprop -id "$window_id" _NET_WM_NAME 2>/dev/null |
+    sed -n 's/^[^=]*= "\(.*\)"$/\1/p'
+}
+
+has_suffix() {
+  local value="$1" suffix="$2"
+
+  [[ $value == *"$suffix" ]]
+}
+
+main() {
+  local pane_title window_id active_title
+
+  pane_title="$(pane_window_title)" || return 0
+  [[ -n $pane_title ]] || return 0
+
+  window_id="$(active_window_id)" || return 0
+  [[ -n $window_id ]] || return 0
+
+  active_title="$(window_title "$window_id")" || return 0
+  [[ -n $active_title ]] || return 0
+  has_suffix "$active_title" "$pane_title" || return 0
+
+  xkb-group 0 >/dev/null 2>&1 || true
+}
+
+main "$@"

@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+# Поднимает рабочие tmux-сессии по описанию в tmux/sessions.conf.
+#
+#   ws                поднять все проекты и открыть дерево выбора
+#   ws <имя>          сразу в конкретный проект
+#   ws --ask          спросить «Открыть tmux?» — для хука в ~/.bashrc
+#   ws -l             показать проекты и их состояние
+#
+# Идемпотентен: если сессия уже запущена, окна не пересоздаются — просто
+# подключение. Иначе повторный запуск плодил бы дубли окон поверх работы.
+set -euo pipefail
+
+# Корень репозитория берём от расположения скрипта, а не от cwd (канон, п.4).
+# Скрипт лежит в <repo>/bin/ и раскладывается симлинком, поэтому путь резолвим
+# через readlink -f: иначе корнем окажется ~/.local/bin.
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+REPO_ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd)"
+
+SESSIONS_CONF="${WS_SESSIONS_CONF:-$REPO_ROOT/tmux/sessions.conf}"
+
+# Имя одноразовой сессии-лобби (см. lobby) и фильтр, который прячет её из
+# дерева. Задано рядом и одной парой: имя используется в двух местах, и
+# разъехавшись, они дали бы лобби, видимое в списке.
+LOBBY_PREFIX='ws-lobby'
+TREE_FILTER="#{?#{m:${LOBBY_PREFIX}-*,#{session_name}},0,1}"
+
+die() {
+  printf 'ws: %s\n' "$*" >&2
+  exit 1
+}
+
+# Строки конфига без комментариев и пустот — единая точка разбора файла.
+#
+# Директива `@repo <префикс> <корень> <репозиторий>` описывает состав группы,
+# а не готовые окна. Из одной строки получаются терминал и редактор; поэтому
+# новый репозиторий не приходится независимо дописывать в две сессии.
+# Пятая колонка — внутренняя политика: окно репозитория существует только при
+# наличии его каталога. Обычные четырёхколоночные строки её не используют.
+#
+# Наличие файла проверяет main: здесь die ушёл бы в подоболочку пайплайна и
+# код возврата всего скрипта остался бы нулевым.
+config_rows() {
+  awk '
+    /^[[:space:]]*(#|$)/ { next }
+
+    $1 == "@repo" {
+      if (NF != 4) {
+        printf "ws: неверная директива @repo в %s:%d\n", FILENAME, FNR > "/dev/stderr"
+        failed = 1
+        next
+      }
+
+      printf "%s-term %s %s/%s term if-dir\n", $2, $4, $3, $4
+      printf "%s-code %s %s/%s edit if-dir\n", $2, $4, $3, $4
+      next
+    }
+
+    { print }
+
+    END { if (failed) exit 1 }
+  ' "$SESSIONS_CONF"
+}
+
+# Имена сессий в порядке появления, без повторов.
+session_names() {
+  config_rows | awk '{ print $1 }' | awk '!seen[$0]++'
+}
+
+windows_of() {
+  local session="$1" row_session win dir layout policy expanded
+
+  while read -r row_session win dir layout policy; do
+    [[ $row_session == "$session" ]] || continue
+
+    if [[ $policy == if-dir ]]; then
+      expanded="$(expand_home "$dir")"
+      if [[ ! -d $expanded ]]; then
+        printf 'ws: нет каталога %s — окно %s:%s пропущено\n' \
+          "$expanded" "$session" "$win" >&2
+        continue
+      fi
+    fi
+
+    printf '%s %s %s\n' "$win" "$dir" "$layout"
+  done < <(config_rows)
+}
+
+expand_home() {
+  local path="$1"
+  printf '%s\n' "${path/#\~/$HOME}"
+}
+
+is_running() {
+  local session="$1"
+  # "=" — точное совпадение имени: без него tmux матчит по префиксу и `ws`
+  # цеплялся бы к чужой сессии с похожим именем.
+  tmux has-session -t "=$session" 2>/dev/null
+}
+
+is_declared() {
+  local session="$1"
+  session_names | grep -qxF -- "$session"
+}
+
+# Каталог окна: несуществующий не роняет запуск, но и не проглатывается молча —
+# сессия нужна сейчас, а разбираться с переехавшим проектом можно потом.
+window_dir() {
+  local dir
+  dir="$(expand_home "$1")"
+
+  if [[ ! -d $dir ]]; then
+    printf 'ws: нет каталога %s — окно откроется в %s\n' "$dir" "$HOME" >&2
+    dir="$HOME"
+  fi
+
+  printf '%s\n' "$dir"
+}
+
+# Программы уходят в панель через send-keys, а не запускаются командой панели.
+# Команда панели означала бы, что после выхода из программы панель схлопнется;
+# шелл под ней оставляет возможность выйти и вернуться.
+run_in_pane() {
+  local target="$1" cmd="$2"
+  tmux send-keys -t "$target" "$cmd" C-m
+}
+
+# Две панели бок о бок: слева агент, справа свои команды. Агент занимает панель
+# на десятки минут, и без второй пришлось бы либо ждать его, либо гасить.
+#
+# Разрез вертикальный (`-h`), а не горизонтальный: вывод агента и команд — это
+# длинные узкие строки, и делить по высоте значит терять строки там, где экран
+# широкий. На широком мониторе две полные высоты читаются лучше двух половин.
+layout_term() {
+  local target="$1" dir="$2"
+
+  tmux split-window -h -t "$target" -c "$dir"
+  tmux select-pane -t "$target.1"
+}
+
+apply_layout() {
+  local layout="$1" target="$2" dir="$3"
+
+  case "$layout" in
+    '' | shell) : ;; # одна панель, обычный терминал
+    edit) run_in_pane "$target" 'nvim .' ;;
+    term) layout_term "$target" "$dir" ;;
+    git) run_in_pane "$target" 'lazygit' ;;
+    *) die "неизвестная раскладка '$layout' в $SESSIONS_CONF" ;;
+  esac
+}
+
+# Ключ sops распечатывается один раз и до того, как разлетятся панели.
+#
+# Каждая панель — свой bash, а ~/.bashrc зовёт sops-age-session. На подъёме
+# сессий ключа в tmpfs ещё нет, и все 64 шелла упираются в очередь к TPM;
+# распечатка при этом спрашивает пароль через polkit. Очередь и единственность
+# распечатки — забота самого sops-age-session, но без прогрева окно с паролем
+# приезжает уже поверх нарисованных сессий и выглядит так, будто пароль
+# спрашивает tmux.
+#
+# Зовётся из create_session, а не из ensure_all: `ws <имя>` поднимает сессию
+# мимо ensure_all, а панели в ней те же. Повторные вызовы бесплатны — ключ уже
+# в tmpfs, и sops-age-session только печатает путь.
+#
+# Тихо и без падений: ws поднимает сессии, а не секреты. Нет скрипта или не
+# отдал ключ — шеллы разберутся сами, каждый своим сообщением.
+warm_sops_key() {
+  command -v sops-age-session >/dev/null 2>&1 || return 0
+  sops-age-session >/dev/null 2>&1 || true
+}
+
+create_session() {
+  local session="$1" win dir layout created=0
+
+  warm_sops_key
+
+  while read -r win dir layout; do
+    dir="$(window_dir "$dir")"
+
+    if (( created )); then
+      tmux new-window -t "$session" -n "$win" -c "$dir"
+    else
+      tmux new-session -d -s "$session" -n "$win" -c "$dir"
+      created=1
+    fi
+
+    apply_layout "$layout" "$session:$win" "$dir"
+  done < <(windows_of "$session")
+
+  (( created )) || die "для сессии '$session' в $SESSIONS_CONF не описано ни одного окна"
+
+  tmux select-window -t "$session:1"
+}
+
+# Изнутри tmux attach-session отказывается работать (вложенность), нужен switch.
+attach_session() {
+  local session="$1"
+
+  if [[ -n ${TMUX:-} ]]; then
+    tmux switch-client -t "=$session"
+  else
+    tmux attach-session -t "=$session"
+  fi
+}
+
+up() {
+  local session="$1"
+
+  is_declared "$session" || die "сессия '$session' не описана в $SESSIONS_CONF"
+  is_running "$session" || create_session "$session"
+  attach_session "$session"
+}
+
+# Дерево показывает все описанные проекты, а не только те, куда сегодня уже
+# заходили, — иначе выбирать было бы не из чего.
+ensure_all() {
+  local session
+  while read -r session; do
+    is_running "$session" || create_session "$session"
+  done < <(session_names)
+}
+
+# Новый терминал входит в свою одноразовую сессию, а не подсаживается к рабочей.
+#
+# Причина: choose-tree — это режим ПАНЕЛИ, а панель у сессии одна на всех
+# подключённых клиентов. Посади новый терминал на сессию, где уже кто-то сидит,
+# и дерево выбора вылезет в чужом окне поверх работы. Проверено вживую: у
+# сессии-жертвы `#{pane_in_mode}` становится 1 сразу для обоих клиентов.
+# Подсадка «на первую свободную сессию» это лечит лишь пока свободные есть.
+#
+# Лобби живёт ровно до выбора проекта: destroy-unattached убирает её в тот
+# момент, когда клиент уходит в выбранную сессию, поэтому в дереве не копится
+# мусор. Опция ставится ПОСЛЕ attach, а не при создании: сессия создаётся
+# отключённой и с этой опцией умерла бы в тот же миг.
+lobby() {
+  tmux new-session -s "$LOBBY_PREFIX-$$" -c "$HOME" \; \
+    set-option destroy-unattached on \; \
+    choose-tree -Zs -f "$TREE_FILTER"
+}
+
+# Двухуровневый выбор: проекты и их окна. Это встроенный choose-tree, а не своя
+# рисовалка — он умеет переключаться, искать и убивать сессии на месте.
+#
+# Само лобби из дерева спрятано фильтром: выбирать в нём нечего, а стояло бы
+# оно последней строкой — курсор при открытии встаёт на текущую сессию, то есть
+# в самый низ списка. С фильтром курсор стартует на первой строке, и список
+# читается сверху вниз в порядке sessions.conf. Наверх лобби не поднять:
+# choose-tree сортирует сессии по порядку создания, а лобби создаётся последним;
+# сортировка по имени или времени подняла бы его, но перетасовала бы проекты.
+tree() {
+  [[ -n "$(session_names | head -1)" ]] || die "в $SESSIONS_CONF не описано ни одной сессии"
+
+  ensure_all
+
+  # Изнутри tmux лобби не нужно: дерево открывается в панели, у которой уже
+  # есть хозяин — тот, кто набрал команду.
+  if [[ -n ${TMUX:-} ]]; then
+    tmux choose-tree -Zs -f "$TREE_FILTER"
+  else
+    lobby
+  fi
+}
+
+list() {
+  local session mark
+  while read -r session; do
+    if is_running "$session"; then mark='запущена'; else mark='—'; fi
+    printf '  %-12s %s\n' "$session" "$mark"
+  done < <(session_names)
+}
+
+# Вопрос на входе в терминал. Молчаливое согласие по Enter — потому что «да»
+# случается почти всегда, а «нет» набирается осознанно.
+ask() {
+  local answer
+  read -r -p 'Открыть tmux? [Y/n] ' answer || return 0
+
+  case "$answer" in
+    '' | y | Y | д | Д) tree ;;
+    *) return 0 ;;
+  esac
+}
+
+main() {
+  command -v tmux >/dev/null || die 'tmux не установлен'
+  [[ -f $SESSIONS_CONF ]] || die "нет файла описания сессий: $SESSIONS_CONF"
+
+  case "${1-}" in
+    '') tree ;;
+    --ask) ask ;;
+    -l | --list) list ;;
+    -h | --help) sed -n '2,7p' -- "$SCRIPT_PATH" | sed 's/^# \{0,1\}//' ;;
+    -*) die "неизвестный ключ: $1" ;;
+    *) up "$1" ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
