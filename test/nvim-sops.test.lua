@@ -129,7 +129,7 @@ end
 vim.cmd.enew()
 vim.fn.setreg('a', 'ordinary-macro')
 vim.api.nvim_buf_delete(0, { force = true })
-assert(vim.fn.getreg('a') == 'ordinary-macro', 'ordinary buffer deletion erased register a')
+assert(vim.fn.getreg 'a' == 'ordinary-macro', 'ordinary buffer deletion erased register a')
 
 -- Cleanup follows the text through numbered-register shifts, including shifts
 -- caused by a later delete in an ordinary buffer.
@@ -138,9 +138,9 @@ vim.cmd.SopsEdit()
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'SECRET_ONE', 'SECRET_TWO', 'tail' })
 vim.cmd 'normal! ggdd'
 vim.cmd 'normal! dd'
-assert(vim.fn.getreg('2') == 'SECRET_ONE\n')
+assert(vim.fn.getreg '2' == 'SECRET_ONE\n')
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('2') == '', 'first deleted plaintext survived numbered-register shift')
+assert(vim.fn.getreg '2' == '', 'first deleted plaintext survived numbered-register shift')
 
 edit(encrypted)
 vim.cmd.SopsEdit()
@@ -150,10 +150,10 @@ vim.cmd 'normal! ggdd'
 vim.cmd('hide edit ' .. vim.fn.fnameescape(ordinary))
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'ordinary deletion', 'tail' })
 vim.cmd 'normal! ggdd'
-assert(vim.fn.getreg('2') == 'SECRET_THREE\n')
+assert(vim.fn.getreg '2' == 'SECRET_THREE\n')
 vim.cmd 'edit!'
 vim.api.nvim_buf_delete(shifted_plain_buffer, { force = true })
-assert(vim.fn.getreg('2') == '', 'plaintext survived ordinary delete and buffer close')
+assert(vim.fn.getreg '2' == '', 'plaintext survived ordinary delete and buffer close')
 
 edit(encrypted)
 vim.cmd.SopsEdit()
@@ -164,17 +164,17 @@ vim.cmd 'normal! ggdd'
 vim.cmd 'edit!'
 edit(encrypted)
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('a') == '', 'named plaintext survived ordinary operations and lock')
+assert(vim.fn.getreg 'a' == '', 'named plaintext survived ordinary operations and lock')
 
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.fn.setreg('a', 'ordinary macro')
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('a') == 'ordinary macro', 'lock erased ordinary macro')
+assert(vim.fn.getreg 'a' == 'ordinary macro', 'lock erased ordinary macro')
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.api.nvim_buf_delete(0, { force = true })
-assert(vim.fn.getreg('a') == 'ordinary macro', 'close erased ordinary macro')
+assert(vim.fn.getreg 'a' == 'ordinary macro', 'close erased ordinary macro')
 
 edit(encrypted)
 vim.cmd.SopsEdit()
@@ -182,24 +182,23 @@ vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'SECRET_CLIPBOARD', 'tail' })
 vim.cmd 'normal! gg"+yy'
 vim.cmd 'normal! "*yy'
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('+') == '' and vim.fn.getreg('*') == '', 'plaintext survived clipboard cleanup')
+assert(vim.fn.getreg '+' == '' and vim.fn.getreg '*' == '', 'plaintext survived clipboard cleanup')
 
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { '' })
 vim.cmd('normal! gg0iSECRET_INSERT' .. string.char(27))
 vim.fn.setreg('/', 'SECRET_INSERT')
-assert(vim.fn.getreg('.') == 'SECRET_INSERT')
+assert(vim.fn.getreg '.' == 'SECRET_INSERT')
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('.') == '' and vim.fn.getreg('/') == '',
-  'insert or search register survived lock: ' .. vim.inspect({ vim.fn.getreg('.'), vim.fn.getreg('/') }))
+assert(vim.fn.getreg '.' == '' and vim.fn.getreg '/' == '', 'insert or search register survived lock: ' .. vim.inspect { vim.fn.getreg '.', vim.fn.getreg '/' })
 
 edit(register_write)
 vim.cmd.SopsEdit()
 vim.api.nvim_set_current_line 'secret: changed-value'
 vim.cmd 'normal! "ayy'
 vim.cmd.write()
-assert(vim.b.sops_plain and vim.fn.getreg('a') == '', 'encrypted write retained plaintext register')
+assert(vim.b.sops_plain and vim.fn.getreg 'a' == '', 'encrypted write retained plaintext register')
 vim.cmd 'SopsLock!'
 
 -- A plaintext yank is removed on lock, but a later ordinary overwrite wins.
@@ -208,13 +207,13 @@ vim.cmd.SopsEdit()
 vim.cmd 'normal! "ayy'
 assert(vim.fn.getreg('a'):find('clear-value', 1, true))
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('a') == '', 'plaintext register survived lock')
+assert(vim.fn.getreg 'a' == '', 'plaintext register survived lock')
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.cmd 'normal! "ayy'
 vim.fn.setreg('a', 'new ordinary macro')
 vim.cmd 'SopsLock!'
-assert(vim.fn.getreg('a') == 'new ordinary macro', 'lock erased later register content')
+assert(vim.fn.getreg 'a' == 'new ordinary macro', 'lock erased later register content')
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.cmd 'normal! "+yy'
@@ -222,19 +221,19 @@ vim.cmd 'normal! "*yy'
 assert(vim.fn.getreg('+'):find('clear-value', 1, true))
 assert(vim.fn.getreg('*'):find('clear-value', 1, true))
 vim.api.nvim_buf_delete(0, { force = true })
-assert(vim.fn.getreg('+') == '' and vim.fn.getreg('*') == '', 'plaintext clipboard survived buffer close')
+assert(vim.fn.getreg '+' == '' and vim.fn.getreg '*' == '', 'plaintext clipboard survived buffer close')
 edit(encrypted)
 vim.cmd.SopsEdit()
 vim.cmd 'normal! "ayy'
 local first_plain_buffer = vim.api.nvim_get_current_buf()
 vim.cmd('hide edit ' .. vim.fn.fnameescape(reload))
 vim.cmd.SopsEdit()
-vim.api.nvim_set_current_line('second-plaintext-buffer')
+vim.api.nvim_set_current_line 'second-plaintext-buffer'
 vim.cmd 'normal! "ayy'
 vim.api.nvim_buf_delete(first_plain_buffer, { force = true })
 assert(vim.fn.getreg('a'):find('second-plaintext-buffer', 1, true), 'closing first buffer erased second buffer yank')
 vim.api.nvim_buf_delete(0, { force = true })
-assert(vim.fn.getreg('a') == '', 'second plaintext buffer yank survived close')
+assert(vim.fn.getreg 'a' == '', 'second plaintext buffer yank survived close')
 
 edit(uppercase)
 local calls_before_uppercase_edit = line_count(log)

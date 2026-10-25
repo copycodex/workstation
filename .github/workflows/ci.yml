@@ -8,14 +8,26 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck neovim tmux
-          cargo install stylua --version 2.5.2 --locked
-          go install github.com/gitleaks/gitleaks/v8@v8.21.2
+          sudo apt-get install -y curl neovim tmux xz-utils unzip
+          curl -fsSL --retry 5 -o /tmp/shellcheck.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  /tmp/shellcheck.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
+          curl -fsSL --retry 5 -o /tmp/stylua.zip https://github.com/JohnnyMorganz/StyLua/releases/download/v2.5.2/stylua-linux-x86_64.zip
+          echo 'bcb0d855e91f102f28a370e850f8566b3b44b79e6274d806ea5246837c0fd5ab  /tmp/stylua.zip' | sha256sum -c -
+          sudo unzip -q /tmp/stylua.zip -d /usr/local/bin
+          curl -fsSL --retry 5 -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz' | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
       - name: Shellcheck
-        run: shellcheck bin/* install/*.sh git/mr.sh test/*.sh
+        run: shellcheck -x bin/* install/*.sh git/mr.sh test/*.sh
       - name: Stylua
         run: stylua --check --config-path nvim/.stylua.toml nvim/init.lua nvim/lua test/*.lua
       - name: Tests
         run: make check
       - name: Secret scan
-        run: "$(go env GOPATH)/bin/gitleaks detect --source . --no-git --redact"
+        run: |
+          scan_dir="$(mktemp -d)"
+          trap 'rm -rf "$scan_dir"' EXIT
+          git archive HEAD | tar -xf - -C "$scan_dir"
+          gitleaks dir "$scan_dir" --no-banner --redact --exit-code 1

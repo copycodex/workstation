@@ -490,15 +490,21 @@ vim.api.nvim_create_autocmd('BufEnter', {
 })
 vim.api.nvim_create_autocmd('TextYankPost', {
   group = 'sops-clipboard',
-  callback = function(args) if vim.b[args.buf].sops_plain then vim.o.clipboard = '' end end,
+  callback = function(args)
+    if vim.b[args.buf].sops_plain then vim.o.clipboard = '' end
+  end,
 })
 
 local function clear_sops_registers(buf)
   buf = sops_bufnr(buf)
   local plaintext = sops_plaintext_lines[buf] or {}
   local registers = { '"', '-', '+', '*', '.', '/' }
-  for number = 0, 9 do registers[#registers + 1] = tostring(number) end
-  for code = string.byte('a'), string.byte('z') do registers[#registers + 1] = string.char(code) end
+  for number = 0, 9 do
+    registers[#registers + 1] = tostring(number)
+  end
+  for code = string.byte 'a', string.byte 'z' do
+    registers[#registers + 1] = string.char(code)
+  end
   -- Uppercase names address the same registers as lowercase names; writing
   -- to an uppercase name would append instead of clearing it.
   for _, name in ipairs(registers) do
@@ -506,8 +512,11 @@ local function clear_sops_registers(buf)
     if ok then
       local contains_plaintext = false
       for _, value in ipairs(contents) do
-        for line in tostring(value):gmatch('[^\n]+') do
-          if plaintext[vim.trim(line)] then contains_plaintext = true; break end
+        for line in tostring(value):gmatch '[^\n]+' do
+          if plaintext[vim.trim(line)] then
+            contains_plaintext = true
+            break
+          end
         end
         if contains_plaintext then break end
       end

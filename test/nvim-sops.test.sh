@@ -3,6 +3,12 @@ set -Eeuo pipefail
 
 test_root="$(mktemp -d)"
 trap 'chmod 700 "$test_root/home/ExampleOrg/demo-service/locked" 2>/dev/null || true; rm -rf "$test_root"' EXIT
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+export WORKSTATION_TEST_NVIM_DIR="$repo_root/nvim"
+export WORKSTATION_TEST_CLIPBOARD_PROVIDER="$repo_root/test/nvim-clipboard-provider.lua"
+export XDG_CONFIG_HOME="$test_root/config"
+export XDG_CACHE_HOME="$test_root/cache"
+export XDG_STATE_HOME="$test_root/state"
 
 if [[ $(id -u) == 0 ]]; then
   printf 'EACCES fixture requires a non-root user; uid 0 bypasses directory permissions\n' >&2
@@ -191,7 +197,10 @@ if [[ ${SOPS_TEST_SCENARIO:-all} != concurrent ]]; then
     SOPS_TEST_OUTSIDE_ROOT="$test_root/outside" \
     SOPS_TEST_INHERITED_KEY_FILE="$test_root/inherited-identity.txt" \
     SOPS_TEST_INHERITED_KEY='synthetic-inherited-key' \
-    WORKSTATION_TEST=1 nvim --headless -u nvim/init.lua -l test/nvim-sops.test.lua
+    WORKSTATION_TEST=1 nvim --headless \
+      --cmd 'lua vim.opt.runtimepath:prepend(vim.env.WORKSTATION_TEST_NVIM_DIR)' \
+      --cmd 'lua dofile(vim.env.WORKSTATION_TEST_CLIPBOARD_PROVIDER)' \
+      -u "$repo_root/nvim/init.lua" -l "$repo_root/test/nvim-sops.test.lua"
 fi
 
 if [[ ${SOPS_TEST_SCENARIO:-all} != main ]]; then
@@ -204,7 +213,10 @@ if [[ ${SOPS_TEST_SCENARIO:-all} != main ]]; then
       SOPS_TEST_LOG="$test_root/sops.log" \
       SOPS_TEST_WRITER="$writer" \
       SOPS_TEST_BARRIER="$barrier" \
-      WORKSTATION_TEST=1 nvim --headless -u nvim/init.lua -l test/nvim-sops-concurrent-writer.lua \
+      WORKSTATION_TEST=1 nvim --headless \
+        --cmd 'lua vim.opt.runtimepath:prepend(vim.env.WORKSTATION_TEST_NVIM_DIR)' \
+        --cmd 'lua dofile(vim.env.WORKSTATION_TEST_CLIPBOARD_PROVIDER)' \
+        -u "$repo_root/nvim/init.lua" -l "$repo_root/test/nvim-sops-concurrent-writer.lua" \
       >"$test_root/writer-$writer.out" 2>&1 &
     writer_pids+=("$!")
   done
